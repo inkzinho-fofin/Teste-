@@ -1,0 +1,173 @@
+
+--!strict
+local FlowLib = {}
+FlowLib.__index = FlowLib
+
+-- [ SERVIÇOS ]
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+
+-- [ TEMA E ATIVOS ]
+local ASSET_ID = "rbxassetid://73770110559942"
+local COLORS = {
+    Black = Color3.fromRGB(10, 10, 15),
+    DarkPurple = Color3.fromRGB(40, 20, 70),
+    LightPurple = Color3.fromRGB(150, 100, 255),
+    Text = Color3.fromRGB(240, 240, 240)
+}
+
+-- [ CONFIGURAÇÕES DE AUTO BOUNTY ]
+FlowLib.Config = {
+    SkillDelay = 0.5,
+    ToolSwapDelay = 0.3,
+    CurrentTarget = nil,
+    AutoBountyEnabled = false
+}
+
+function FlowLib.new()
+    local self = setmetatable({}, FlowLib)
+    return self
+end
+
+-- === SISTEMA DE UI (ROXO/PRETO) ===
+
+function FlowLib:InitUI()
+    local sg = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    sg.Name = "FlowAutoBounty"
+    sg.ResetOnSpawn = false
+
+    -- Botão Redondo (Abrir/Fechar)
+    local openBtn = Instance.new("ImageButton")
+    openBtn.Name = "ToggleButton"
+    openBtn.Size = UDim2.new(0, 50, 0, 50)
+    openBtn.Position = UDim2.new(0, 20, 0, 20)
+    openBtn.Image = ASSET_ID
+    openBtn.BackgroundTransparency = 1
+    openBtn.Parent = sg
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = openBtn
+
+    -- Interface Principal
+    local mainFrame = Instance.new("ImageLabel")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 350, 0, 450)
+    mainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
+    mainFrame.Image = ASSET_ID
+    mainFrame.ImageColor3 = Color3.fromRGB(150, 150, 150) -- Escurecer fundo
+    mainFrame.Visible = false
+    mainFrame.Parent = sg
+
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 15)
+    mainCorner.Parent = mainFrame
+
+    -- Overlay de cor roxa
+    local overlay = Instance.new("Frame")
+    overlay.Size = UDim2.new(1, 0, 1, 0)
+    overlay.BackgroundColor3 = COLORS.Black
+    overlay.BackgroundTransparency = 0.4
+    overlay.ZIndex = 0
+    overlay.Parent = mainFrame
+
+    -- Título
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 50)
+    title.Text = "FLOW_AUTO BOUNTY v2026"
+    title.TextColor3 = COLORS.LightPurple
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 20
+    title.BackgroundTransparency = 1
+    title.Parent = mainFrame
+
+    -- Lógica de Abrir/Fechar
+    openBtn.MouseButton1Click:Connect(function()
+        mainFrame.Visible = not mainFrame.Visible
+        TweenService:Create(openBtn, TweenInfo.new(0.3), {Rotation = mainFrame.Visible and 90 or 0}):Play()
+    end)
+
+    return mainFrame
+end
+
+-- === LÓGICA DE AUTO BOUNTY (COMBATE) ===
+
+-- Selecionar Equipe Pirata Automaticamente
+function FlowLib:SelectPirates()
+    local comms = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+    if comms then
+        comms:InvokeServer("SetTeam", "Pirates")
+    end
+end
+
+-- Sistema de Uso de Habilidades Suave
+function FlowLib:UseSkills()
+    local keys = {"Z", "X", "C", "V", "F"}
+    for _, key in ipairs(keys) do
+        if not self.Config.AutoBountyEnabled then break end
+        
+        -- Simula o pressionamento de tecla (VirtualInput no Roblox exige cuidado, usamos RemoteEvent se disponível)
+        game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode[key], false, game)
+        task.wait(0.05)
+        game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode[key], false, game)
+        
+        task.wait(self.Config.SkillDelay) -- Delay configurável entre habilidades
+    end
+end
+
+-- Troca de Ferramenta (Suave)
+function FlowLib:EquipTool(toolName: string)
+    local backpack = LocalPlayer.Backpack
+    local tool = backpack:FindFirstChild(toolName)
+    if tool and Character then
+        task.wait(self.Config.ToolSwapDelay)
+        Character.Humanoid:EquipTool(tool)
+    end
+end
+
+-- Busca de Alvo (Target System)
+function FlowLib:GetBestTarget(): Player?
+    local bestDist = math.huge
+    local target = nil
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            local dist = (Character.PrimaryPart.Position - p.Character.PrimaryPart.Position).Magnitude
+            if dist < bestDist then
+                bestDist = dist
+                target = p
+            end
+        end
+    end
+    return target
+end
+
+-- Loop de Movimentação e Ataque
+function FlowLib:StartBountyLoop()
+    self.Config.AutoBountyEnabled = true
+    
+    task.spawn(function()
+        while self.Config.AutoBountyEnabled do
+            local target = self:GetBestTarget()
+            if target and target.Character then
+                -- Teleport suave ou Tween até o alvo (Distância de segurança para habilidades)
+                Character.PrimaryPart.CFrame = target.Character.PrimaryPart.CFrame * CFrame.new(0, 5, 2)
+                
+                -- Ciclo de Ataque
+                self:EquipTool("Melee")
+                self:UseSkills()
+                
+                self:EquipTool("Blox Fruit")
+                self:UseSkills()
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+return FlowLib
